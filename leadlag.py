@@ -45,8 +45,8 @@ PREV_CLOSE = {"TSLA": 375.0, "TSLL": 10.01, "TSLR": 17.39, "TSLG": 5.0}
 
 PRICE_COL = "wmid"                       # "mid" or "wmid" for the analysis
 RTH_START, RTH_END = "09:35", "15:55"    # skip the opening/closing auctions
-GRID_MS = 50                             # sampling grid for lead-lag
-MAX_LAG_MS = 2000                        # lead-lag search window (+/-)
+GRID_US = 500                             # sampling grid for lead-lag
+MAX_LAG_US = 10_000                        # lead-lag search window (+/-)
 
 F_LAST = 128
 PX_SCALE = 1e-9
@@ -273,16 +273,16 @@ def main():
     print(bbo.groupby("symbol").agg(updates=("mid", "size"),
                                     crossed=("crossed", "sum"),
                                     med_spread=("spread", "median")))
-    try:
-        1/0; bbo.to_parquet("bbo_20261009.parquet")
-    except Exception:
-        bbo.to_csv("bbo_20261009.csv.gz", index=False)
+    # try:
+    #     bbo.to_parquet("bbo_20261009.parquet")
+    # except Exception:
+    #     bbo.to_csv("bbo_20261009.csv.gz", index=False)
 
     # Regular-hours grid
     s, e = rth_bounds_ns()
-    step = GRID_MS * 1_000_000
+    step = GRID_US * 1_000
     grid = np.arange(s, e, step, dtype=np.int64)
-    max_lag = MAX_LAG_MS // GRID_MS
+    max_lag = MAX_LAG_US // GRID_US
 
     S = sample_on_grid(bbo, UNDERLYING, PRICE_COL, grid)
     r_S = np.diff(np.log(S))
@@ -295,14 +295,14 @@ def main():
         premia[sym] = prem
 
         lags, cc = xcorr(r_S, np.diff(np.log(X)), max_lag)
-        curves[sym] = (lags * GRID_MS, cc)
+        curves[sym] = (lags * GRID_US / 1_000, cc)
         k = lags[np.nanargmax(cc)]
         results.append({
             "symbol": sym,
             "fair_mode": mode,
             "premium_mean_bp": np.nanmean(prem),
             "premium_std_bp": np.nanstd(prem),
-            "peak_lag_ms": k * GRID_MS,
+            "peak_lag_ms": k * GRID_US / 1_000,
             "peak_corr": np.nanmax(cc),
             "corr_at_0": cc[lags == 0][0],
         })
@@ -315,42 +315,49 @@ def main():
     return res
 
 
-def plot(grid, S, bbo, premia, curves):
+def plot(grid, S, bbo, premia, curves, plot_step_ms=500):
+    """Plot results. Time-series charts are thinned to one point per
+    plot_step_ms (use 100 to keep short spikes visible)."""
     import matplotlib.pyplot as plt
 
-    t = pd.to_datetime(grid, utc=True).tz_convert(TZ)
+    step_ns = grid[1] - grid[0] if len(grid) > 1 else 1
+    k = max(1, int(plot_step_ms * 1_000_000 // step_ns))
+    g, Sg = grid[::k], S[::k]
+    t = pd.to_datetime(g, utc=True).tz_convert(TZ)
 
+    # 1. De-levered returns
     fig, ax = plt.subplots(figsize=(12, 4))
-    ax.plot(t, S / S[np.isfinite(S)][0] - 1, label=UNDERLYING, lw=0.8)
+    ax.plot(t, Sg / Sg[np.isfinite(Sg)][0] - 1, label=UNDERLYING, lw=0.8)
     for sym in LETFS:
-        X = sample_on_grid(bbo, sym, PRICE_COL, grid)
+        X = sample_on_grid(bbo, sym, PRICE_COL, g)
         ax.plot(t, (X / X[np.isfinite(X)][0] - 1) / LETFS[sym]["L"],
                 label=f"{sym} / L", lw=0.8)
     ax.set_title(f"{PRICE_COL} return since {RTH_START} (LETFs de-levered)")
-    ax.legend()
+    ax.legend(loc="upper right")
     fig.tight_layout()
-    # fig.savefig("returns.png", dpi=130)
 
+    # 2. Premium vs. fair value
     fig, ax = plt.subplots(figsize=(12, 4))
     for sym, p in premia.items():
-        ax.plot(t, p, label=sym, lw=0.6)
+        ax.plot(t, p[::k], label=sym, lw=0.6)
     ax.axhline(0, color="k", lw=0.5)
-    ax.set_title("LETF premium vs. fair value (bp)")
-    ax.legend()
+    ax.set_title(f"LETF premium vs. fair value (bp), "
+                 f"sampled every {plot_step_ms:g} ms")
+    ax.legend(loc="upper right")
     fig.tight_layout()
-    # fig.savefig("premium.png", dpi=130)
 
+    # 3. Lead-lag correlation
     fig, ax = plt.subplots(figsize=(8, 4))
     for sym, (lag_ms, cc) in curves.items():
         ax.plot(lag_ms, cc, marker=".", label=sym)
     ax.axvline(0, color="k", lw=0.5)
     ax.set_xlabel(f"lag (ms); > 0 means LETF lags {UNDERLYING}")
     ax.set_ylabel("return correlation")
-    ax.set_title(f"Lead-lag, {GRID_MS} ms grid")
-    ax.legend()
+    ax.set_title(f"Lead-lag, {GRID_US / 1_000:g} ms grid")
+    ax.legend(loc="upper right")
     fig.tight_layout()
-    # fig.savefig("leadlag.png", dpi=130)
-    print("saved returns.png, premium.png, leadlag.png")
+
+    plt.show()
 
 
 if __name__ == "__main__":
