@@ -210,6 +210,12 @@ cython_debug/
 # Temporary file for partial code execution
 tempCodeRunnerFile.py
 
+# Generated research outputs can be recreated from the scripts and source data.
+# Keep large per-trade and per-order files local; publish compact summaries when useful.
+backtests/
+analysis/*/orders.csv
+analysis/*/trade_prints.csv
+
 # Ruff stuff:
 .ruff_cache/
 
