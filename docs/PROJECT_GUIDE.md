@@ -85,6 +85,111 @@ Repeat for each downloaded day. The cache avoids decoding the entire compressed 
 
 `utils/leadlag.py` tests several descriptive relationships (A–D): signed move co-occurrence by lag, ETF reaction timing compared with a shifted-time null, impulse response, and quote movement after an estimated fair-value breach. A single day's summary is descriptive and is not by itself proof of causality or statistical significance. To test whether same-direction ETF midquote changes tend to follow TSLA over the cached quarter, run `python3 -m utils.leadlag_significance`; it reports week-blocked inference against an intraday shifted-time placebo and writes the session detail and summary under `leadlag_out/leadlag_significance_20260701_20260930/` by default. This remains a timing test, not proof of a tradable edge.
 
+## Analysis C across multiple sessions
+
+To estimate the speed of TSLA-to-ETF price adjustment across the same 64
+July–September sessions, run:
+
+```sh
+python analyze_impulse_batch.py --workers 1 --resume
+```
+
+This applies the existing forward `utils.leadlag.impulse` calculation to each
+daily cache. It keeps the original exchange-event clock, midprice definition,
+2x leverage scaling and lag grid, while excluding triggers whose full
+[-1 ms, +1 second] window would extend outside regular trading hours.
+It extends the **forward** TSLA-to-ETF part of C; the reverse ETF-to-TSLA
+diagnostic remains in the single-day analyzer.
+
+Daily response ratios are averaged within ISO weeks and then equally across
+weeks. A paired week bootstrap (5,000 draws by default) produces pointwise
+curve confidence intervals and confidence intervals for t50/t90. The same
+weeks are resampled for all three ETFs, preserving their dependence. Quote
+events and overlapping responses are not treated as independent observations.
+
+The presentation metrics are the first crossings of **50% and 90% of the
+aggregate curve's own one-second response**, using the original logarithmic
+time interpolation. They are not event waiting-time medians, time to complete
+adjustment, or executable arbitrage windows. The underlying response ratio
+can be nonmonotone because its TSLA denominator changes with the horizon.
+Daily timing medians and quartiles are also saved, but describe a different
+quantity from crossing times of the aggregate curve.
+
+Outputs are under `leadlag_out/impulse_20260701_20260930/`:
+
+- `01_impulse_response.png/.svg`: response curves and normalized adjustment speed.
+- `02_response_timing.png/.svg`: t50/t90 comparison with week-bootstrap intervals.
+- `timing_summary.csv`: aggregate timing, uncertainty, daily timing distribution.
+- `aggregate_curves.csv`, `daily_curves.csv`, `daily_timing.csv`: underlying results.
+- `pairwise_timing.csv`: paired bootstrap differences; faster fractions are not p-values.
+- `REPORT.md`, `summary.json`: methodology, selected dates, results and limitations.
+- `sessions/`: daily checkpoints; `--resume` reuses matching source files and library code.
+
+Use `--start-day`, `--end-day`, `--data-dir` and `--out` for another sample.
+At least two ISO weeks are required for inference. The script uses available
+caches only; inspect the dates in `summary.json` when running a different range.
+
+## Standalone book-pressure predictive analysis
+
+`analyze_book_pressure.py` answers whether displayed book pressure differs
+across TSLA, TSLL, TSLR and TSLG, whether it predicts subsequent midprice
+changes, and whether those changes cover spreads. It is separate from the
+strategy backtests and uses the existing daily NPZ caches directly.
+
+```sh
+python analyze_book_pressure.py --workers 1 --resume
+```
+
+Defaults select July 1–September 30, 2026 (64 local sessions), fit a linear
+pressure-only model on July–August (43 sessions), and evaluate the frozen model
+on September (21 sessions). Pressure is best-bid/ask **displayed size imbalance**:
+`(bid_size - ask_size) / (bid_size + ask_size)`, not full-depth pressure or order
+flow. The analysis samples every 100 ms and measures returns at 1, 10, 100,
+1,000 and 10,000 ms. Features and targets use the last complete BBO state
+strictly before each timestamp; invalid book states are not forward-filled
+through clears. All horizons stay within the same regular session.
+
+The cost diagnostic follows the sign of pressure when `abs(pressure) >= 0.5`
+and subtracts both entry and exit half-spreads from the directional midprice
+move. `--fee-bps` adds round-trip fees. This is an indicative spread hurdle,
+not executable P&L: no latency, inventory, queue or fill model is applied.
+Overlapping observations are not treated as independent: confidence intervals
+resample ISO weeks, using equal-day means within weeks. September contains
+only five ISO-week clusters, so intervals are exploratory. OOS R² uses pooled
+observations and compares the fixed model with the constant training-mean
+forecast; negative values mean the model performs worse than that baseline.
+
+Results default to `leadlag_out/book_pressure_20260701_20260930/`:
+
+- `REPORT.md` and `summary.json`: results, configuration, dates and limitations.
+- `pressure_comparison.csv`: instrument-level pressure, spread and depth comparison.
+- `out_of_sample_models.csv`: fitted coefficients and held-out forecast scores.
+- `predictive_summary.csv` and `pressure_bins.csv`: effects and week-based intervals.
+- `daily_*.csv`: daily statistics for inspection and independent aggregation.
+- `01_pressure_comparison`, `02_pressure_vs_future_return`,
+  `03_predictive_power`, `04_move_vs_spread`: PNG and SVG illustrations.
+- `sessions/`: resumable per-session statistics; `--resume` validates the source
+  path, size, modification time and analysis parameters before reusing them.
+
+To change the dates, holdout or output directory:
+
+```sh
+python analyze_book_pressure.py \
+  --start-day 20260701 --end-day 20260930 --test-start 20260901 \
+  --data-dir XNAS_MBO --out leadlag_out/book_pressure_custom \
+  --workers 1 --resume
+```
+
+Use a separate output directory for alternative specifications. The script
+scans available caches; inspect `summary.json` to verify actual selected dates.
+It does not download or silently generate missing data. `--max-quote-age-ms`
+optionally excludes old BBO states; by default, standing quotes remain valid
+until changed. Quote age measures time since the last BBO state change, not
+time since the last market-data heartbeat. Long-horizon outcomes overlap when
+the grid is finer than the forecast horizon; the output is not a non-overlapping
+trade portfolio. The descriptive association does not establish incremental
+predictive power beyond TSLA returns or other signals.
+
 ## Run the backtests
 
 ### Single day
