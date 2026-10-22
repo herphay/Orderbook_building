@@ -1,0 +1,7 @@
+a,b,metric,difference_ci_low_ms,difference_ci_high_ms,bootstrap_fraction_a_faster,note
+TSLL,TSLR,t50,2.1450102845374466,4.716399469998163,0.0,"Paired bootstrap stability, not a null-hypothesis p-value"
+TSLL,TSLR,t90,280.29121475109685,371.68340009393603,0.0,"Paired bootstrap stability, not a null-hypothesis p-value"
+TSLL,TSLG,t50,-14.849328126856296,-8.63318346343976,1.0,"Paired bootstrap stability, not a null-hypothesis p-value"
+TSLL,TSLG,t90,-233.513368848695,-150.41051763225911,1.0,"Paired bootstrap stability, not a null-hypothesis p-value"
+TSLR,TSLG,t50,-19.469208228536157,-11.060341423340601,1.0,"Paired bootstrap stability, not a null-hypothesis p-value"
+TSLR,TSLG,t90,-545.7571814693798,-468.3904746267118,1.0,"Paired bootstrap stability, not a null-hypothesis p-value"

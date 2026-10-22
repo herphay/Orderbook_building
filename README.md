@@ -10,6 +10,18 @@ saved results.
 For the FN6908 Track A mini-project framing, research questions, and proposed
 analysis, see [the project plan](docs/mini_project_track_a_plan.md).
 
+For a standalone comparison of book pressure across TSLA and its three ETFs,
+including held-out price prediction and a spread-cost hurdle, run
+`python analyze_book_pressure.py --workers 1 --resume`. Tables, a report and
+four PNG/SVG charts are saved to `leadlag_out/book_pressure_20260701_20260930/`.
+See [the pressure analysis guide](docs/PROJECT_GUIDE.md#standalone-book-pressure-predictive-analysis)
+for the definition, chronological train/test split and limitations.
+
+For quarter-wide Analysis C response curves and t50/t90 timing estimates,
+run `python analyze_impulse_batch.py --workers 1 --resume`. Results and PNG/SVG
+charts go to `leadlag_out/impulse_20260701_20260930/`; see the
+[multi-session Analysis C guide](docs/PROJECT_GUIDE.md#analysis-c-across-multiple-sessions).
+
 ## How the repository fits together
 
 The downloader stores raw daily files and filtered record caches. Analysis and
